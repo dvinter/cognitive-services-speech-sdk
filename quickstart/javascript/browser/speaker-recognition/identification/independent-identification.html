@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Microsoft Cognitive Services Speech SDK JavaScript Quickstart</title>
+  <meta charset="utf-8" />
+</head>
+<body style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px;">
+  <div id="warning">
+    <h1 style="font-weight:500;">Speech Recognition Speech SDK not found (microsoft.cognitiveservices.speech.sdk.bundle.js missing).</h1>
+  </div>
+  
+  <div id="content" style="display:none">
+    <table width="100%">
+      <tr>
+        <td></td>
+        <td><h1 style="font-weight:500;">Microsoft Cognitive Services Speech SDK JavaScript Quickstart</h1></td>
+      </tr>
+      <tr>
+        <td align="right"><a href="https://docs.microsoft.com/azure/cognitive-services/speech-service/get-started" target="_blank">Subscription Key</a></td>
+        <td><input id="subscriptionKey" type="text" size="40" value=""></td>
+      </tr>
+      <tr>
+        <td align="right">Region</td>
+        <td><input id="serviceRegion" type="text" size="40" value=""></td>
+      </tr>
+      <tr>
+        <td align="right">Locale</td>
+        <td><input id="Locale" type="text" size="40" value="en-us"></td>
+      </tr>
+      <tr>
+        <td align="right">Enrollment File</td>
+        <td>
+          <input type="file" multiple id="filePicker" accept=".wav" />
+        </td>
+      </tr>
+      <tr>
+        <td align="right">Test Identification File</td>
+        <td>
+          <input type="file" id="testFilePicker" accept=".wav" />
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td><button id="createVoiceProfileButton">Create Voice Profile</button></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td><button id="identifySpeakerButton">Identify Speaker</button></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td><button id="listPhrasesButton">List Activation Phrases</button></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td><button id="deleteProfileButton">Delete Voice Profile</button></td>
+      </tr>
+      <tr>
+        <td align="right" valign="top">Result</td>
+        <td><textarea id="resultDiv" style="display: inline-block;width:500px;height:200px"></textarea></td>
+      </tr>
+    </table>
+  </div>
+  
+  <!-- Speech SDK reference sdk. -->
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+
+  <!-- Speech SDK reference sdk. -->
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+
+  <!-- Speech SDK USAGE -->
+  <script>
+    // status fields and start button in UI
+    var resultDiv;
+    var createVoiceProfileButton;
+    var identifySpeakerButton;
+    var deleteProfileButton;
+    var listPhrasesButton;
+
+    // subscription key and region for speech services.
+    var subscriptionKey, serviceRegion;
+    var SpeechSDK;
+    var client;
+    var filePicker, testFilePicker, audioFiles, testFile;
+    var speechConfig;
+    var profiles = [];
+    var locale;
+
+    document.addEventListener("DOMContentLoaded", function () {
+
+      createVoiceProfileButton = document.getElementById("createVoiceProfileButton");
+      identifySpeakerButton = document.getElementById("identifySpeakerButton");
+      listPhrasesButton = document.getElementById("listPhrasesButton");
+      deleteProfileButton = document.getElementById("deleteProfileButton");
+      subscriptionKey = document.getElementById("subscriptionKey");
+      serviceRegion = document.getElementById("serviceRegion");
+      locale = document.getElementById("Locale");
+      resultDiv = document.getElementById("resultDiv");
+      filePicker = document.getElementById("filePicker");
+      testFilePicker = document.getElementById("testFilePicker");
+      
+      deleteProfileButton.disabled = true;
+      identifySpeakerButton.disabled = true;
+      filePicker.addEventListener("change", function () {
+          audioFiles = filePicker.files;
+      });
+
+      testFilePicker.addEventListener("change", function () {
+          testFile = testFilePicker.files[0];
+      });
+
+      createVoiceProfileButton.addEventListener("click", async function () {
+        createVoiceProfileButton.disabled = true;
+        resultDiv.innerHTML = "";
+
+        resultDiv.innerHTML += "==============================================\n";
+        resultDiv.innerHTML += "Start Enroll profiles\n\n";
+
+
+        if (subscriptionKey.value === "" || subscriptionKey.value === "subscription") {
+          alert("Please enter your Microsoft Cognitive Services Speech subscription key!");
+          createVoiceProfileButton.disabled = false;
+          return;
+        }
+        speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey.value, serviceRegion.value);
+
+        speechConfig.setProperty(SpeechSDK.PropertyId.SpeechServiceConnection_TranslationVoice, locale.value);
+        client = new SpeechSDK.VoiceProfileClient(speechConfig);
+
+        try {
+          for (const audioFile of audioFiles)
+          {
+            var profile = await client.createProfileAsync(SpeechSDK.VoiceProfileType.TextIndependentIdentification, locale.value);
+            window.console.log(profile);
+
+            resultDiv.innerHTML += " Profile created ProfileId: " + profile.profileId;
+            resultDiv.innerHTML += "\r\n"; 
+            deleteProfileButton.disabled = false;
+
+            let audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(audioFile);
+            let result = await client.enrollProfileAsync(profile, audioConfig);
+            resultDiv.innerHTML += "  Enrollment result: Reason=" + SpeechSDK.ResultReason[result.reason] + ""; 
+            resultDiv.innerHTML += "\r\n"; 
+            if (result.privReason === SpeechSDK.ResultReason.EnrolledVoiceProfile)
+            {
+              resultDiv.innerHTML += "   AudioFile=" + audioFile.name + ", enrollmentStatus=" + result.privDetails.enrollmentStatus + "\n";
+              resultDiv.innerHTML += "   audioLength=" + result.privDetails.audioLength + ", audioSpeechLength=" + result.privDetails.audioSpeechLength + "\n"; 
+              resultDiv.innerHTML += "\r\n"; 
+              profiles.push(profile);
+            }
+            else if (result.privReason === SpeechSDK.ResultReason.Canceled)
+            {
+              let cancellationDetails = SpeechSDK.SpeakerRecognitionCancellationDetails.fromResult(result);
+              resultDiv.innerHTML += "   ErrorDetail: :" + result.privErrorDetails + "\n";
+              resultDiv.innerHTML += "\r\n";
+
+              result = await client.deleteProfileAsync(profile);
+            }
+            window.console.log(result);
+          }
+
+          identifySpeakerButton.disabled = false;
+
+        } catch (err) {
+          window.console.log(err);
+          resultDiv.innerHTML += " ERROR: " + err; 
+          resultDiv.innerHTML += "\r\n"; 
+        }
+
+        createVoiceProfileButton.disabled = false;
+
+        resultDiv.innerHTML += "End Enroll profiles: " + profiles.length + "/" + audioFiles.length + " profiles are enrolled\n";
+        resultDiv.innerHTML += "==============================================\n";
+      });
+
+      identifySpeakerButton.addEventListener("click", async function () {
+        resultDiv.innerHTML += "\n";
+        resultDiv.innerHTML += "==============================================\n";
+        resultDiv.innerHTML += "Start Identify Speaker\n";
+
+        let testAudioConfig = SpeechSDK.AudioConfig.fromWavFileInput(testFile);
+        let recognizer = new SpeechSDK.SpeakerRecognizer(speechConfig, testAudioConfig);
+        let model = SpeechSDK.SpeakerIdentificationModel.fromProfiles(profiles);
+        try {
+          let result = await recognizer.recognizeOnceAsync(model);
+          window.console.log(result);
+          let reason = result.reason; 
+          resultDiv.innerHTML += " Identification result: Reason=" + SpeechSDK.ResultReason[reason]; 
+          resultDiv.innerHTML += "\n"; 
+          if (reason === SpeechSDK.ResultReason.Canceled) {
+            let cancellationDetails = SpeechSDK.SpeakerRecognitionCancellationDetails.fromResult(result);
+            resultDiv.innerHTML += "  Error Details: " + cancellationDetails.errorDetails;
+            resultDiv.innerHTML += "\n"; 
+            resultDiv.innerHTML += "  Error Code: " + cancellationDetails.errorCode;
+            resultDiv.innerHTML += "\n"; 
+          } else {
+            resultDiv.innerHTML += "  ProfileId: " + result.profileId; 
+            resultDiv.innerHTML += "\n"; 
+            resultDiv.innerHTML += "  Score: " + result.score; 
+            resultDiv.innerHTML += "\r\n"; 
+          }
+        } catch (err) {
+          window.console.log(err);
+          resultDiv.innerHTML += " ERROR: " + err; 
+        }
+
+        resultDiv.innerHTML += "End Identify Speaker\n";
+        resultDiv.innerHTML += "==============================================\n";
+      });
+
+      listPhrasesButton.addEventListener("click", async function () {
+        var speechCfg; 
+        var voiceProfClient;
+
+        resultDiv.innerHTML += "\n";
+        resultDiv.innerHTML += "==============================================\n";
+        resultDiv.innerHTML += "Start List Activation Phrases: ";
+        resultDiv.innerHTML += locale.value + "\n";
+
+        if (subscriptionKey.value === "" || subscriptionKey.value === "subscription") {
+          alert("Please enter your Microsoft Cognitive Services Speech subscription key!");
+          return;
+        }
+        speechCfg = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey.value, serviceRegion.value);
+        voiceProfClient = new SpeechSDK.VoiceProfileClient(speechCfg);
+
+        if (voiceProfClient) {
+          try {
+            let result = await voiceProfClient.getActivationPhrasesAsync(SpeechSDK.VoiceProfileType.TextIndependentIdentification, locale.value);
+            if (result.phrases.length > 0) {
+              for (const phrase of result.phrases) {
+                resultDiv.innerHTML += " Activation Phrase: " + phrase;
+                resultDiv.innerHTML += "\r\n";
+              }
+            }
+          } catch (err) {
+            window.console.log(err);
+            resultDiv.innerHTML += " ERROR: " + err; 
+          }
+        }
+
+        resultDiv.innerHTML += "End List Activation Phrases\n";
+        resultDiv.innerHTML += "==============================================\n";
+      });
+
+      deleteProfileButton.addEventListener("click", async function () {
+
+        resultDiv.innerHTML += "\n";
+        resultDiv.innerHTML += "==============================================\n";
+        resultDiv.innerHTML += "Start Delete profiles\n";
+
+        try {
+          for (const profile of profiles)
+          {
+            resultDiv.innerHTML += " Deleting profile: ProfileId=" + profile.profileId + "\n";
+            let result = await client.deleteProfileAsync(profile);
+            resultDiv.innerHTML += "  Result Reason: " + SpeechSDK.ResultReason[result.reason];
+            resultDiv.innerHTML += "\r\n";
+          }
+          profiles.length = 0;
+          deleteProfileButton.disabled = true;
+          identifySpeakerButton.disabled = true;
+        } catch (err) {
+          window.console.log(err);
+          resultDiv.innerHTML += " ERROR: " + err; 
+        }
+
+        resultDiv.innerHTML += "End Delete profiles\n";
+        resultDiv.innerHTML += "==============================================\n";
+      });
+
+      if (!!window.SpeechSDK) {
+        SpeechSDK = window.SpeechSDK;
+        createVoiceProfileButton.disabled = false;
+
+        document.getElementById('content').style.display = 'block';
+        document.getElementById('warning').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
